@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   Search, Plus, PackageSearch, TrendingUp, CheckCircle2, AlertCircle,
   Loader2, Inbox, Shield, FileSpreadsheet, MapPin, UserCircle, LogOut,
+  Trophy, Gift,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
@@ -14,10 +15,14 @@ import ItemDetail from '@/components/ItemDetail';
 import AdminReport from '@/components/AdminReport';
 import AuthPage from '@/components/AuthPage';
 import ProfilePage from '@/components/ProfilePage';
+import Leaderboard from '@/components/Leaderboard';
+import RewardsStore from '@/components/RewardsStore';
+import NotificationBell from '@/components/NotificationBell';
+import LostBot from '@/components/LostBot';
 
 type StatusFilter = 'all' | ItemStatus;
 type CategoryFilter = 'all' | ItemCategory;
-type View = 'dashboard' | 'profile';
+type View = 'dashboard' | 'profile' | 'leaderboard' | 'rewards';
 
 function App() {
   const { session, profile, loading, signOut } = useAuth();
@@ -74,6 +79,11 @@ function App() {
         if (!matches) return false;
       }
       return true;
+    }).sort((a, b) => {
+      // High-priority items pinned to top
+      if (a.high_priority && !b.high_priority) return -1;
+      if (!a.high_priority && b.high_priority) return 1;
+      return 0;
     });
   }, [items, statusFilter, categoryFilter, locationFilter, searchQuery]);
 
@@ -105,7 +115,6 @@ function App() {
 
   const hasActiveFilters = statusFilter !== 'all' || categoryFilter !== 'all' || locationFilter !== 'all' || searchQuery.trim();
 
-  // Show auth page if not logged in
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-100">
@@ -118,39 +127,45 @@ function App() {
     return <AuthPage />;
   }
 
+  const headerProps = {
+    view, setView, isAdmin, setIsAdmin, adminReportOpen, setAdminReportOpen,
+    setReportModalOpen, profileName: profile?.full_name, onSignOut: signOut,
+  };
+
   if (view === 'profile') {
     return (
       <div className="min-h-screen bg-slate-100">
-        <Header
-          view={view}
-          setView={setView}
-          isAdmin={isAdmin}
-          setIsAdmin={setIsAdmin}
-          adminReportOpen={adminReportOpen}
-          setAdminReportOpen={setAdminReportOpen}
-          setReportModalOpen={setReportModalOpen}
-          profileName={profile?.full_name}
-          onSignOut={signOut}
-        />
+        <Header {...headerProps} />
         <ProfilePage onBack={() => setView('dashboard')} />
         <AdminReportModal isOpen={adminReportOpen} onClose={() => setAdminReportOpen(false)} />
+        <LostBot onItemClick={(item) => setSelectedItem(item)} onReport={() => setReportModalOpen(true)} />
+      </div>
+    );
+  }
+
+  if (view === 'leaderboard') {
+    return (
+      <div className="min-h-screen bg-slate-100">
+        <Header {...headerProps} />
+        <Leaderboard />
+        <LostBot onItemClick={(item) => setSelectedItem(item)} onReport={() => setReportModalOpen(true)} />
+      </div>
+    );
+  }
+
+  if (view === 'rewards') {
+    return (
+      <div className="min-h-screen bg-slate-100">
+        <Header {...headerProps} />
+        <RewardsStore />
+        <LostBot onItemClick={(item) => setSelectedItem(item)} onReport={() => setReportModalOpen(true)} />
       </div>
     );
   }
 
   return (
     <div className="min-h-screen bg-slate-100">
-      <Header
-        view={view}
-        setView={setView}
-        isAdmin={isAdmin}
-        setIsAdmin={setIsAdmin}
-        adminReportOpen={adminReportOpen}
-        setAdminReportOpen={setAdminReportOpen}
-        setReportModalOpen={setReportModalOpen}
-        profileName={profile?.full_name}
-        onSignOut={signOut}
-      />
+      <Header {...headerProps} />
 
       <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
         {isAdmin && (
@@ -269,6 +284,9 @@ function App() {
       </Modal>
 
       <AdminReportModal isOpen={adminReportOpen} onClose={() => setAdminReportOpen(false)} />
+
+      {/* AI LostBot Assistant */}
+      <LostBot onItemClick={(item) => setSelectedItem(item)} onReport={() => setReportModalOpen(true)} />
     </div>
   );
 }
@@ -303,6 +321,33 @@ function Header({
           </button>
 
           <div className="flex items-center gap-2">
+            {/* Notification Bell */}
+            <NotificationBell />
+
+            {/* Leaderboard button */}
+            <button
+              onClick={() => setView(view === 'leaderboard' ? 'dashboard' : 'leaderboard')}
+              className={`flex items-center gap-1.5 rounded-xl px-3 py-2.5 text-sm font-semibold transition-all ${
+                view === 'leaderboard' ? 'bg-amber-100 text-amber-700 ring-1 ring-amber-200' : 'border border-slate-200 text-slate-600 hover:bg-slate-50'
+              }`}
+              title="Leaderboard"
+            >
+              <Trophy size={16} />
+              <span className="hidden lg:inline">Leaderboard</span>
+            </button>
+
+            {/* Rewards button */}
+            <button
+              onClick={() => setView(view === 'rewards' ? 'dashboard' : 'rewards')}
+              className={`flex items-center gap-1.5 rounded-xl px-3 py-2.5 text-sm font-semibold transition-all ${
+                view === 'rewards' ? 'bg-indigo-100 text-indigo-700 ring-1 ring-indigo-200' : 'border border-slate-200 text-slate-600 hover:bg-slate-50'
+              }`}
+              title="Rewards Store"
+            >
+              <Gift size={16} />
+              <span className="hidden lg:inline">Rewards</span>
+            </button>
+
             {/* Admin toggle */}
             <button
               onClick={() => setIsAdmin(!isAdmin)}

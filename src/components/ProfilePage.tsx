@@ -2,11 +2,12 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   User, Mail, Phone, Edit2, Trash2, CheckCircle2, Package, Loader2,
   Save, X, AlertCircle, MapPin, Calendar, ShieldQuestion, Check, XCircle,
-  Hand, Inbox, MessageCircle, Ban,
+  Hand, Inbox, MessageCircle, Ban, Sparkles, Gift, Award,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
-import type { LostFoundItem, Claim, Profile } from '@/types';
+import { createNotification } from '@/lib/notifications';
+import type { LostFoundItem, Claim, Profile, Redemption } from '@/types';
 import { statusBadgeClass, statusDotClass, capitalizeStatus, claimStatusBadgeClass } from '@/types';
 import Modal from '@/components/Modal';
 import EditItemModal from '@/components/EditItemModal';
@@ -29,6 +30,7 @@ export default function ProfilePage({ onBack }: ProfilePageProps) {
   const [chatItem, setChatItem] = useState<LostFoundItem | null>(null);
   const [chatPartnerId, setChatPartnerId] = useState<string | null>(null);
   const [chatPartnerProfile, setChatPartnerProfile] = useState<Profile | null>(null);
+  const [redemptions, setRedemptions] = useState<Redemption[]>([]);
 
   const [editingProfile, setEditingProfile] = useState(false);
   const [fullName, setFullName] = useState(profile?.full_name || '');
@@ -65,6 +67,18 @@ export default function ProfilePage({ onBack }: ProfilePageProps) {
     if (myItems.length > 0) loadClaims();
     else { setClaims([]); setLoadingClaims(false); }
   }, [myItems, loadClaims]);
+
+  const loadRedemptions = useCallback(async () => {
+    if (!session?.user?.id) return;
+    const { data } = await supabase
+      .from('redemptions')
+      .select('*')
+      .eq('user_id', session.user.id)
+      .order('created_at', { ascending: false });
+    setRedemptions((data as Redemption[]) || []);
+  }, [session?.user?.id]);
+
+  useEffect(() => { loadRedemptions(); }, [loadRedemptions]);
 
   useEffect(() => {
     setFullName(profile?.full_name || '');
@@ -134,7 +148,24 @@ export default function ProfilePage({ onBack }: ProfilePageProps) {
           .from('lost_found_items')
           .update({ status: 'resolved', claimed: true, claim_pending: false })
           .eq('id', claim.item_id);
+        // Notify the claimant their claim was approved
+        await createNotification(
+          claim.claimant_id,
+          'status_update',
+          'Claim Approved!',
+          `Your claim for "${itemById(claim.item_id)?.name || 'an item'}" has been approved.`,
+          claim.item_id,
+        );
         loadMyItems();
+      } else {
+        // Notify the claimant their claim was rejected
+        await createNotification(
+          claim.claimant_id,
+          'status_update',
+          'Claim Rejected',
+          `Your claim for "${itemById(claim.item_id)?.name || 'an item'}" was not approved.`,
+          claim.item_id,
+        );
       }
       setClaims((prev) => prev.map((c) => (c.id === claim.id ? { ...c, status: action } : c)));
     }
@@ -212,6 +243,37 @@ export default function ProfilePage({ onBack }: ProfilePageProps) {
             <AlertCircle size={16} /> {profileError}
           </div>
         )}
+      </div>
+
+      {/* Points & Achievements */}
+      <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div className="flex items-center gap-4 rounded-2xl border border-indigo-200 bg-gradient-to-br from-indigo-50 to-emerald-50 p-5 shadow-sm">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white">
+            <Sparkles size={24} />
+          </div>
+          <div>
+            <p className="text-xs font-medium text-slate-400">Total Points</p>
+            <p className="text-2xl font-bold text-indigo-700">{profile.points || 0}</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-600">
+            <CheckCircle2 size={24} />
+          </div>
+          <div>
+            <p className="text-xs font-medium text-slate-400">Items Returned</p>
+            <p className="text-2xl font-bold text-slate-800">{myItems.filter((i) => i.status === 'resolved').length}</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-600">
+            <Award size={24} />
+          </div>
+          <div>
+            <p className="text-xs font-medium text-slate-400">Vouchers Redeemed</p>
+            <p className="text-2xl font-bold text-slate-800">{redemptions.length}</p>
+          </div>
+        </div>
       </div>
 
       {/* Pending Claims Review */}
@@ -401,6 +463,40 @@ export default function ProfilePage({ onBack }: ProfilePageProps) {
                 </div>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {/* Redemption History */}
+      {redemptions.length > 0 && (
+        <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="mb-4 flex items-center gap-2">
+            <Gift size={20} className="text-indigo-600" />
+            <h2 className="text-lg font-bold text-slate-900">Redeemed Vouchers</h2>
+            <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-500">{redemptions.length}</span>
+          </div>
+          <div className="space-y-3">
+            {redemptions.map((r) => (
+              <div key={r.id} className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 p-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600">
+                  <Gift size={16} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold text-slate-700">{r.reward_name}</p>
+                  <p className="text-xs text-slate-400">{r.points_cost} points &middot; {new Date(r.created_at).toLocaleDateString()}</p>
+                </div>
+                <code className="rounded-lg bg-slate-900 px-3 py-1.5 text-sm font-bold tracking-wider text-white">
+                  {r.code}
+                </code>
+                <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ${
+                  r.status === 'active' ? 'bg-emerald-50 text-emerald-700 ring-emerald-200' :
+                  r.status === 'used' ? 'bg-slate-50 text-slate-500 ring-slate-200' :
+                  'bg-rose-50 text-rose-600 ring-rose-200'
+                }`}>
+                  {r.status}
+                </span>
+              </div>
+            ))}
           </div>
         </div>
       )}

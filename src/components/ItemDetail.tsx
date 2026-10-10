@@ -3,13 +3,15 @@ import {
   MapPin, Calendar, Tag, User, Mail, MessageCircle, ImageOff,
   Copy, Check, Hand, CheckCircle2, Trash2, RotateCcw, ShieldAlert,
   Send, Loader2, MessagesSquare, ShieldQuestion, Lock, AlertCircle,
-  Ban,
+  Ban, Sparkles, Package, Award,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
-import type { LostFoundItem, ItemStatus, Profile, Claim } from '@/types';
-import { statusBadgeClass, statusDotClass, capitalizeStatus } from '@/types';
+import { createNotification } from '@/lib/notifications';
+import type { LostFoundItem, ItemStatus, Profile, Claim, SmartMatchResult } from '@/types';
+import { statusBadgeClass, statusDotClass, capitalizeStatus, smartMatchItems } from '@/types';
 import ChatDrawer from '@/components/ChatDrawer';
+import HandoverCertificate from '@/components/HandoverCertificate';
 
 const MAX_ATTEMPTS = 3;
 
@@ -36,6 +38,8 @@ export default function ItemDetail({ item, onClose, onUpdated, onDeleted, isAdmi
   const [existingClaim, setExistingClaim] = useState<Claim | null>(null);
   const [currentItem, setCurrentItem] = useState(item);
   const [posterProfile, setPosterProfile] = useState<Profile | null>(null);
+  const [showCertificate, setShowCertificate] = useState(false);
+  const [smartMatches, setSmartMatches] = useState<SmartMatchResult[]>([]);
 
   const isOwner = currentItem.user_id === session?.user?.id;
 
@@ -73,6 +77,28 @@ export default function ItemDetail({ item, onClose, onUpdated, onDeleted, isAdmi
     fetchPosterProfile();
     fetchExistingClaim();
   }, [item, fetchPosterProfile, fetchExistingClaim]);
+
+  // Smart-Match AI: fetch all active items and compute matches
+  useEffect(() => {
+    const fetchMatches = async () => {
+      const { data } = await supabase
+        .from('lost_found_items')
+        .select('*')
+        .in('status', ['lost', 'found'])
+        .neq('id', currentItem.id);
+      const otherItems = (data as LostFoundItem[]) || [];
+      // For a Lost item, match against Found items; for a Found item, match against Lost items
+      const targetType = currentItem.status === 'lost' ? 'found' : 'lost';
+      const candidates = otherItems.filter((i) => i.status === targetType);
+      const query = `${currentItem.name} ${currentItem.description || ''} ${currentItem.location}`;
+      setSmartMatches(smartMatchItems(query, candidates, 3));
+    };
+    if (currentItem.status === 'lost' || currentItem.status === 'found') {
+      fetchMatches();
+    } else {
+      setSmartMatches([]);
+    }
+  }, [currentItem]);
 
   const displayName = posterProfile?.full_name || currentItem.reporter_name || 'Anonymous';
   const displayEmail = posterProfile?.email || currentItem.reporter_email;
@@ -168,6 +194,11 @@ export default function ItemDetail({ item, onClose, onUpdated, onDeleted, isAdmi
             <span className={`h-1.5 w-1.5 rounded-full ${statusDotClass(currentItem.status)}`} />
             {capitalizeStatus(currentItem.status)}
           </span>
+          {currentItem.high_priority && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-rose-500 px-3 py-1 text-xs font-semibold text-white shadow-sm">
+              <Sparkles size={10} /> AI: High Priority
+            </span>
+          )}
         </div>
       </div>
 
@@ -208,6 +239,47 @@ export default function ItemDetail({ item, onClose, onUpdated, onDeleted, isAdmi
           <p className="mt-1 text-sm font-semibold text-slate-700">{currentItem.location}</p>
         </div>
       </div>
+
+      {/* AI Smart-Match Suggestions */}
+      {smartMatches.length > 0 && (
+        <div className="rounded-xl border border-indigo-200 bg-indigo-50/40 p-4">
+          <div className="mb-3 flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600 text-white">
+              <Sparkles size={16} />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-slate-800">AI Smart-Match Suggestions</p>
+              <p className="text-xs text-slate-400">
+                {currentItem.status === 'lost' ? 'Found items that might be yours' : 'Lost items that might match what you found'}
+              </p>
+            </div>
+          </div>
+          <div className="space-y-2">
+            {smartMatches.map((match) => (
+              <button
+                key={match.item.id}
+                onClick={() => setCurrentItem(match.item)}
+                className="group flex w-full items-center gap-3 rounded-lg border border-slate-200 bg-white p-2.5 text-left transition-all hover:border-indigo-300 hover:shadow-md"
+              >
+                <div className="h-10 w-10 shrink-0 overflow-hidden rounded-lg bg-slate-100">
+                  {match.item.image_url ? (
+                    <img src={match.item.image_url} alt={match.item.name} className="h-full w-full object-cover" />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center text-slate-300"><Package size={16} /></div>
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold text-slate-800 group-hover:text-indigo-700">{match.item.name}</p>
+                  <p className="truncate text-xs text-slate-400">{match.item.location} &middot; {capitalizeStatus(match.item.status)}</p>
+                </div>
+                <div className="flex shrink-0 items-center gap-1.5 rounded-full bg-indigo-100 px-2.5 py-1 text-xs font-bold text-indigo-700">
+                  <Sparkles size={10} /> {match.confidence}% Match
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Poster / Contact section */}
       <div className="rounded-xl border border-slate-200 p-4">
@@ -366,9 +438,17 @@ export default function ItemDetail({ item, onClose, onUpdated, onDeleted, isAdmi
           </div>
         )}
         {currentItem.status === 'resolved' && (
-          <div className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-indigo-50 px-4 py-2.5 text-sm font-semibold text-indigo-700 ring-1 ring-indigo-200">
-            <CheckCircle2 size={16} /> Resolved
-          </div>
+          <>
+            <div className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-indigo-50 px-4 py-2.5 text-sm font-semibold text-indigo-700 ring-1 ring-indigo-200">
+              <CheckCircle2 size={16} /> Resolved
+            </div>
+            <button
+              onClick={() => setShowCertificate(true)}
+              className="flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white transition-all hover:bg-indigo-700"
+            >
+              <Award size={16} /> Certificate
+            </button>
+          </>
         )}
       </div>
 
@@ -397,6 +477,16 @@ export default function ItemDetail({ item, onClose, onUpdated, onDeleted, isAdmi
 
       {/* Inquiry sub-modal */}
       {showInquiry && <InquiryForm item={currentItem} onClose={() => setShowInquiry(false)} />}
+
+      {/* Handover Certificate */}
+      {showCertificate && (
+        <HandoverCertificate
+          item={currentItem}
+          finderName={posterProfile?.full_name || currentItem.reporter_name || 'Anonymous'}
+          claimantName={null}
+          onClose={() => setShowCertificate(false)}
+        />
+      )}
     </div>
   );
 }

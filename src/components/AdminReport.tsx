@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Download, CheckCircle2, Loader2, FileSpreadsheet } from 'lucide-react';
+import { Download, CheckCircle2, Loader2, FileSpreadsheet, Zap } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import type { LostFoundItem } from '@/types';
 import { statusBadgeClass, statusDotClass, capitalizeStatus } from '@/types';
@@ -29,12 +29,16 @@ export default function AdminReport({ onDownload }: AdminReportProps) {
   const filtered = items.filter((i) => {
     if (filter === 'all') return i.status === 'resolved' || i.status === 'claimed';
     return i.status === filter;
+  }).sort((a, b) => {
+    if (a.high_priority && !b.high_priority) return -1;
+    if (!a.high_priority && b.high_priority) return 1;
+    return 0;
   });
 
   const handleExportCSV = () => {
-    const headers = ['Item Title', 'Category', 'Status', 'Location', 'Date', 'Reporter', 'Email', 'WhatsApp'];
+    const headers = ['Item Title', 'Priority', 'Category', 'Status', 'Location', 'Date', 'Reporter', 'Email', 'WhatsApp'];
     const rows = filtered.map((i) => [
-      i.name, i.category, capitalizeStatus(i.status), i.location,
+      i.name, i.high_priority ? 'HIGH' : 'Normal', i.category, capitalizeStatus(i.status), i.location,
       new Date(i.date).toLocaleDateString(), i.reporter_name, i.reporter_email,
       i.whatsapp_contact || '',
     ]);
@@ -53,6 +57,14 @@ export default function AdminReport({ onDownload }: AdminReportProps) {
 
   return (
     <div className="space-y-4">
+      {/* High Priority Alert */}
+      {filtered.some((i) => i.high_priority) && (
+        <div className="flex items-center gap-2 rounded-xl bg-rose-50 px-4 py-3 text-sm text-rose-700 ring-1 ring-rose-200">
+          <Zap size={16} />
+          <span><strong>{filtered.filter((i) => i.high_priority).length} high-priority item{filtered.filter((i) => i.high_priority).length !== 1 ? 's' : ''}</strong> detected by AI — sorted to the top.</span>
+        </div>
+      )}
+
       {/* Filter + Export */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex gap-2">
@@ -90,9 +102,9 @@ export default function AdminReport({ onDownload }: AdminReportProps) {
           <p className="text-2xl font-bold text-amber-700">{items.filter((i) => i.status === 'claimed').length}</p>
           <p className="text-xs text-amber-500">Claimed</p>
         </div>
-        <div className="rounded-xl bg-slate-100 px-4 py-3 text-center">
-          <p className="text-2xl font-bold text-slate-700">{items.length}</p>
-          <p className="text-xs text-slate-500">Total Reports</p>
+        <div className="rounded-xl bg-rose-50 px-4 py-3 text-center">
+          <p className="text-2xl font-bold text-rose-700">{items.filter((i) => i.high_priority).length}</p>
+          <p className="text-xs text-rose-500">High Priority</p>
         </div>
       </div>
 
@@ -114,6 +126,7 @@ export default function AdminReport({ onDownload }: AdminReportProps) {
             <thead className="bg-slate-50 text-xs text-slate-500">
               <tr>
                 <th className="px-4 py-3 font-semibold">Item</th>
+                <th className="px-4 py-3 font-semibold">Priority</th>
                 <th className="px-4 py-3 font-semibold">Category</th>
                 <th className="px-4 py-3 font-semibold">Status</th>
                 <th className="px-4 py-3 font-semibold">Location</th>
@@ -123,8 +136,17 @@ export default function AdminReport({ onDownload }: AdminReportProps) {
             </thead>
             <tbody className="divide-y divide-slate-100">
               {filtered.map((item) => (
-                <tr key={item.id} className="transition-colors hover:bg-slate-50">
+                <tr key={item.id} className={`transition-colors hover:bg-slate-50 ${item.high_priority ? 'bg-rose-50/30' : ''}`}>
                   <td className="px-4 py-3 font-medium text-slate-800">{item.name}</td>
+                  <td className="px-4 py-3">
+                    {item.high_priority ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-rose-100 px-2 py-0.5 text-xs font-semibold text-rose-700">
+                        <Zap size={10} /> High
+                      </span>
+                    ) : (
+                      <span className="text-xs text-slate-400">Normal</span>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-slate-500">{item.category}</td>
                   <td className="px-4 py-3">
                     <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${statusBadgeClass(item.status)}`}>

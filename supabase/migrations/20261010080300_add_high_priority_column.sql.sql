@@ -1,0 +1,1 @@
+ALTER TABLE lost_found_items ADD COLUMN IF NOT EXISTS high_priority boolean NOT NULL DEFAULT false;

@@ -1,4 +1,4 @@
-import { MapPin, Calendar, Clock, ImageOff } from 'lucide-react';
+import { MapPin, Calendar, Clock, ImageOff, Zap } from 'lucide-react';
 import type { LostFoundItem } from '@/types';
 import { statusBadgeClass, statusDotClass, capitalizeStatus } from '@/types';
 
@@ -43,6 +43,11 @@ export default function ItemCard({ item, onClick }: ItemCardProps) {
             <span className={`h-1.5 w-1.5 rounded-full ${statusDotClass(item.status)}`} />
             {capitalizeStatus(item.status)}
           </span>
+          {item.high_priority && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-rose-500 px-2.5 py-1 text-xs font-semibold text-white shadow-sm">
+              <Zap size={10} /> High Priority
+            </span>
+          )}
         </div>
         <div className="absolute bottom-3 right-3">
           <span className="inline-flex items-center rounded-full bg-white/90 px-2.5 py-1 text-xs font-medium text-slate-600 shadow-sm backdrop-blur">

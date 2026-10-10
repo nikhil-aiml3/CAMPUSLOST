@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { Loader2, Send, Upload, ShieldQuestion } from 'lucide-react';
+import { Loader2, Send, Upload, ShieldQuestion, Sparkles, Zap } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
-import { CATEGORIES, REPORT_STATUSES, type ItemCategory, type NewLostFoundItem } from '@/types';
+import { CATEGORIES, REPORT_STATUSES, classifyAIPriority, type ItemCategory, type NewLostFoundItem } from '@/types';
 
 interface ReportFormProps {
   onSubmitted: () => void;
@@ -40,6 +40,8 @@ export default function ReportForm({ onSubmitted, onCancel }: ReportFormProps) {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof FormState, string>>>({});
+
+  const isHighPriority = formData.status === 'lost' && classifyAIPriority(formData.name, formData.category, formData.description);
 
   const update = <K extends keyof FormState>(key: K, value: FormState[K]) => {
     setFormData((prev) => ({ ...prev, [key]: value }));
@@ -102,6 +104,7 @@ export default function ReportForm({ onSubmitted, onCancel }: ReportFormProps) {
       whatsapp_contact: profile?.whatsapp_contact || null,
       verification_question: formData.status === 'found' ? formData.verification_question.trim() || null : null,
       verification_answer: formData.status === 'found' ? formData.verification_answer.trim() || null : null,
+      high_priority: formData.status === 'lost' && classifyAIPriority(formData.name, formData.category, formData.description),
     };
 
     const { error: insertError } = await supabase
@@ -243,6 +246,31 @@ export default function ReportForm({ onSubmitted, onCancel }: ReportFormProps) {
       )}
 
       {error && <div className="rounded-xl bg-rose-50 px-4 py-3 text-sm text-rose-700 ring-1 ring-rose-200">{error}</div>}
+
+      {/* AI Priority indicator */}
+      {formData.status === 'lost' && formData.name.trim() && (
+        <div className={`flex items-center gap-3 rounded-xl px-4 py-3 transition-all ${
+          isHighPriority
+            ? 'bg-rose-50 ring-1 ring-rose-200'
+            : 'bg-slate-50 ring-1 ring-slate-200'
+        }`}>
+          <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${
+            isHighPriority ? 'bg-rose-100 text-rose-600' : 'bg-slate-200 text-slate-500'
+          }`}>
+            {isHighPriority ? <Zap size={18} /> : <Sparkles size={18} />}
+          </div>
+          <div className="text-sm">
+            <p className={`font-semibold ${isHighPriority ? 'text-rose-700' : 'text-slate-600'}`}>
+              {isHighPriority ? 'AI: High Priority Item Detected' : 'AI: Standard Priority'}
+            </p>
+            <p className={`text-xs ${isHighPriority ? 'text-rose-500' : 'text-slate-400'}`}>
+              {isHighPriority
+                ? 'This item type (electronics, ID, wallet, medical) will be flagged for urgent attention on the admin dashboard.'
+                : 'This item will be listed with normal priority.'}
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Actions */}
       <div className="flex gap-3 pt-2">
